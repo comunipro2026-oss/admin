@@ -1560,6 +1560,7 @@ body{background:var(--bg);font-family:'Nunito',sans-serif;color:var(--text);min-
           </select>
         </div>
         <div class="form-group full-width"><div class="form-label">ESPECIALIDAD</div><input class="form-input" id="huSpecialty" type="text" placeholder="Fonoaudiología"></div>
+        <div class="form-group full-width"><div class="form-label">TELÉFONO (WhatsApp, opcional)</div><input class="form-input" id="huPhone" type="tel" placeholder="Ej: 59899123456"></div>
       </div>
       <button class="btn-primary" id="huCreateBtn" onclick="crearHadrionUser()" style="background:linear-gradient(135deg,#9B7EBD,#6d4a96)">✨ AGREGAR PROFESIONAL</button>
     </div>
@@ -2937,6 +2938,8 @@ async function eliminarHadrionOrg(id, nombre) {
 }
 
 // ── PROFESIONALES (hadrion_users) ────────
+let _currentHadrionUsers = [];
+
 function abrirHadrionUsersModal(orgId, orgName) {
   _currentHadrionOrgId = orgId;
   document.getElementById('huTitle').textContent = '👥 Profesionales — ' + orgName;
@@ -2950,6 +2953,7 @@ async function cargarHadrionUsers(orgId) {
   try {
     const data = await sbFetch(`${HADRION_USER_TABLE}?org_id=eq.${orgId}&select=*`);
     const users = data || [];
+    _currentHadrionUsers = users;
     if(!users.length){ el.innerHTML='<div class="loading">Sin profesionales aún.</div>'; return; }
     el.innerHTML = users.map(u => `
       <div class="ou-item">
@@ -2958,10 +2962,24 @@ async function cargarHadrionUsers(orgId) {
           <div class="ou-clave">${escHtml(u.email||'')}</div>
         </div>
         <div class="ou-actions">
+          <button class="lic-btn" style="background:rgba(37,211,102,.15);color:#25D366;" onclick="enviarWhatsAppHadrion('${u.id}')">📲 WhatsApp</button>
           <button class="lic-btn btn-del" onclick="eliminarHadrionUser('${u.id}','${escHtml(u.name||u.nombre||'')}')">🗑️ Eliminar</button>
         </div>
       </div>`).join('');
   } catch(e) { el.innerHTML = `<div class="loading">❌ ${e.message}</div>`; }
+}
+
+function enviarWhatsAppHadrion(id) {
+  const u = _currentHadrionUsers.find(x => String(x.id) === String(id));
+  if(!u){ showToast('❌ No se encontró el profesional','#ef4444'); return; }
+  let phone = (u.phone || '').replace(/[^0-9]/g,'');
+  if(!phone){
+    phone = prompt('No hay teléfono guardado para '+(u.name||'')+'. Ingresá el número con código de país (ej: 59899123456):');
+    if(!phone) return;
+    phone = phone.replace(/[^0-9]/g,'');
+  }
+  const mensaje = `¡Hola ${u.name||''}! 👋 Tus datos de acceso a Hadrion:\n\n🌐 Sitio: https://hadrion.pages.dev/\n📧 Usuario: ${u.email||''}\n🔑 Contraseña: ${u.password||''}\n\n¡Cualquier duda avisame!`;
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`, '_blank');
 }
 
 async function crearHadrionUser() {
@@ -2972,17 +2990,18 @@ async function crearHadrionUser() {
   const role      = document.getElementById('huRole').value;
   const plan      = document.getElementById('huPlan').value;
   const specialty = document.getElementById('huSpecialty').value.trim();
+  const phone     = document.getElementById('huPhone').value.trim();
   if(!name || !email || !password){ showToast('❌ Nombre, email y contraseña son obligatorios','#ef4444'); return; }
   const btn = document.getElementById('huCreateBtn');
   btn.disabled=true; btn.textContent='⏳ CREANDO...';
   try {
     await sbFetch(HADRION_USER_TABLE, {
       method:'POST',
-      body: JSON.stringify({ org_id:_currentHadrionOrgId, name, email, password, role, specialty:specialty||null, plan, status:'active', avatar:(name[0]||'?').toUpperCase(), color:'#9B7EBD' })
+      body: JSON.stringify({ org_id:_currentHadrionOrgId, name, email, password, role, specialty:specialty||null, plan, phone:phone||null, status:'active', avatar:(name[0]||'?').toUpperCase(), color:'#9B7EBD' })
     });
     showToast('✅ Profesional agregado: '+name,'#9B7EBD');
     logActivity('➕','Profesional Hadrion creado: '+name);
-    ['huNombre','huEmail','huPassword','huSpecialty'].forEach(id=>{ document.getElementById(id).value=''; });
+    ['huNombre','huEmail','huPassword','huSpecialty','huPhone'].forEach(id=>{ document.getElementById(id).value=''; });
     cargarHadrionUsers(_currentHadrionOrgId);
   } catch(e){ showToast('❌ '+e.message,'#ef4444'); }
   finally { btn.disabled=false; btn.textContent='✨ AGREGAR PROFESIONAL'; }
